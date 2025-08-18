@@ -1,0 +1,183 @@
+/* Wide screen optimizations - PC displays */
+@media (min-width: 1200px) {
+  .app {
+    max-width: none;
+  }
+
+  .app-content {
+    max-width: 1400px;
+    padding: 30px;
+    gap: 30px;
+  }
+
+  .sidebar {
+    width: 400px;
+  }
+
+  .main-viewer {
+    min-height: 700px;
+    border-radius: 12px;
+  }
+
+  .app-header {
+    padding: 30px;
+  }
+
+  .app-header h1 {
+    font-size: 3rem;
+    margin-bottom: 12px;
+  }
+
+  .app-header p {
+    font-size: 1.3rem;
+  }
+
+  .protein-info {
+    padding: 20px;
+    border-radius: 10px;
+  }
+
+  .protein-info h3 {
+    font-size: 1.4rem;
+    margin-bottom: 15px;
+  }
+
+  .protein-info p {
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+  }
+
+  .welcome-screen {
+    padding: 60px;
+  }
+
+  .welcome-screen h2 {
+    font-size: 2.5rem;
+    margin-bottom: 30px;
+  }
+
+  .welcome-screen p {
+    font-size: 1.4rem;
+    max-width: 600px;
+  }
+}
+
+/* Ultra-wide screen support */
+@media (min-width: 1600px) {
+  .app-content {
+    max-width: 1600px;
+    padding: 40px;
+    gap: 40px;
+  }
+
+  .sidebar {
+    width: 450px;
+  }
+
+  .main-viewer {
+    min-height: 800px;
+  }
+
+  .app-header {
+    padding: 40px;
+  }
+
+  .app-header h1 {
+    font-size: 3.5rem;
+  }
+
+  .app-header p {
+    font-size: 1.5rem;
+  }
+}
+
+/* 4K screen support */
+@media (min-width: 2000px) {
+  .app-content {
+    max-width: 1800px;
+    padding: 50px;
+    gap: 50px;
+  }
+
+  .sidebar {
+    width: 500px;
+  }
+
+  .main-viewer {
+    min-height: 900px;
+  }
+
+  .app-header {
+    padding: 50px;
+  }
+
+  .app-header h1 {
+    font-size: 4rem;
+  }
+
+  .app-header p {
+    font-size: 1.6rem;
+  }
+
+  .protein-info {
+    padding: 25px;
+  }
+
+  .protein-info h3 {
+    font-size: 1.6rem;
+  }
+
+  .protein-info p {
+    font-size: 1.2rem;
+  }
+}
+
+/* Full HD optimization */
+@media (min-width: 1920px) {
+  .app-content {
+    max-width: 1700px;
+  }
+
+  .main-viewer {
+    min-height: 750px;
+  }
+}
+
+/* Responsive font scaling */
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .app-header h1 {
+    font-size: calc(2.5rem + 0.5vw);
+  }
+
+  .welcome-screen h2 {
+    font-size: calc(2rem + 0.5vw);
+  }
+}
+
+@media (min-width: 1600px) {
+  .app-header h1 {
+    font-size: calc(3rem + 0.3vw);
+  }
+
+  .welcome-screen h2 {
+    font-size: calc(2.5rem + 0.3vw);
+  }
+}
+
+/* Flexible grid for ultra-wide */
+@media (min-width: 1800px) {
+  .app-content {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 50px;
+  }
+
+  .sidebar {
+    width: auto;
+    max-width: 500px;
+  }
+
+  .main-viewer {
+    min-height: 85vh;
+  }
+}

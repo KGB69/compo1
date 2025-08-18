@@ -1,0 +1,52 @@
+{
+  "name": "protein-viewer-vr",
+  "private": false,
+  "version": "1.0.0",
+  "description": "Interactive 3D protein visualization with VR support for Oculus Quest",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "deploy": "npm run build && netlify deploy --prod"
+  },
+  "keywords": [
+    "protein",
+    "visualization",
+    "VR",
+    "Oculus",
+    "WebXR",
+    "3D",
+    "molecular",
+    "biology"
+  ],
+  "author": "Protein Viewer Team",
+  "license": "MIT",
+  "homepage": "https://protein-viewer-vr.netlify.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/username/protein-viewer-vr"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.3",
+    "@react-three/fiber": "^9.3.0",
+    "@react-three/xr": "^6.1.5",
+    "molstar": "^4.18.0",
+    "ngl": "^2.4.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "three": "^0.179.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.1.2"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  }
+}
