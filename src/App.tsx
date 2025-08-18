@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { XR, Controllers, Hands } from '@react-three/xr';
+import { XR } from '@react-three/xr';
 import ImmersiveProteinViewer from './components/ImmersiveProteinViewer';
 import VRWorld from './components/VRWorld';
 import PCFallbackWorld from './components/PCFallbackWorld';
@@ -15,90 +15,60 @@ function App() {
     setCurrentProtein(pdbId);
   };
 
-  const renderMode = () => {
-    switch (mode) {
-      case 'pc':
-        return <PCFallbackWorld />;
-      case 'vr':
-        return (
-          <div style={{ width: '100vw', height: '100vh' }}>
-            <Canvas 
-              shadows 
-              camera={{ position: [0, 1.6, 5], fov: 75 }}
-              gl={{ 
-                antialias: true,
-                alpha: false,
-                powerPreference: "high-performance"
-              }}
-            >
-              <XR>
-                <Controllers />
-                <Hands />
-                <VRWorld />
-              </XR>
-            </Canvas>
-          </div>
-        );
-      default:
-        return (
+  return (
+    <div className="app">
+      <div className="mode-selector">
+        <button 
+          className={mode === 'viewer' ? 'active' : ''}
+          onClick={() => setMode('viewer')}
+        >
+          3D Viewer
+        </button>
+        <button 
+          className={mode === 'pc' ? 'active' : ''}
+          onClick={() => setMode('pc')}
+        >
+          PC World
+        </button>
+        <button 
+          className={mode === 'vr' ? 'active' : ''}
+          onClick={() => setMode('vr')}
+        >
+          VR World
+        </button>
+      </div>
+      
+      <div className="protein-selector">
+        <input
+          type="text"
+          value={currentProtein}
+          onChange={(e) => handleProteinChange(e.target.value)}
+          placeholder="Enter PDB ID (e.g., 1A1U)"
+        />
+      </div>
+      
+      <div className="content">
+        {mode === 'viewer' && (
           <ImmersiveProteinViewer 
             pdbId={currentProtein}
             onProteinChange={handleProteinChange}
           />
-        );
-    }
-  };
-
-  return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative' }}>
-      {renderMode()}
-      
-      {/* Mode Toggle Buttons */}
-      {mode === 'viewer' && (
-        <div style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          zIndex: 1002,
-          display: 'flex',
-          gap: '10px'
-        }}>
-          <button
-            onClick={() => setMode('pc')}
-            style={{
-              backgroundColor: 'rgba(0, 123, 255, 0.8)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '25px',
-              padding: '12px 24px',
-              fontSize: '16px',
-              cursor: 'pointer',
-              backdropFilter: 'blur(10px)',
-              transition: 'all 0.3s ease'
-            }}
-            title="Test PC 3D World"
-          >
-            🖥️ PC World
-          </button>
-          <button
-            onClick={() => setMode('vr')}
-            style={{
-              backgroundColor: 'rgba(138, 43, 226, 0.8)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '25px',
-              padding: '12px 24px',
-              fontSize: '16px',
-              cursor: 'pointer',
-              backdropFilter: 'blur(10px)',
-              transition: 'all 0.3s ease'
-            }}
-            title="Enter Virtual Reality Mode"
-          >
-            🥽 VR World
-          </button>
-        </div>
-      )}
+        )}
+        {mode === 'pc' && <PCFallbackWorld />}
+        {mode === 'vr' && (
+          <div style={{ width: '100vw', height: '100vh' }}>
+            <Canvas 
+              shadows 
+              camera={{ position: [0, 1.6, 3], fov: 75 }}
+              style={{ width: '100%', height: '100%' }}
+            >
+              <XR>
+                <VRWorld />
+              </XR>
+            </Canvas>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

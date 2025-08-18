@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -17,7 +17,6 @@ export default function ProteinInWorld({
   viewMode = 'cartoon',
   heightOffset = 1.5
 }: ProteinInWorldProps) {
-  const proteinRef = useRef<THREE.Group>(null);
   const [error, setError] = useState<string | null>(null);
   const [proteinStructure, setProteinStructure] = useState<THREE.Group | null>(null);
   const [currentHeight, setCurrentHeight] = useState(heightOffset);
@@ -252,29 +251,15 @@ export default function ProteinInWorld({
   };
 
   useEffect(() => {
-    if (proteinStructure && proteinRef.current) {
-      // Clear existing children
-      while (proteinRef.current.children.length > 0) {
-        proteinRef.current.remove(proteinRef.current.children[0]);
-      }
-      
-      // Add the actual protein structure
-      proteinRef.current.add(proteinStructure);
-    }
+    // Handle protein structure updates
   }, [proteinStructure]);
 
   // Smooth height animation
   useFrame(() => {
-    if (proteinRef.current) {
-      // Gentle rotation
-      proteinRef.current.rotation.y += 0.005;
-      
-      // Smooth height transition
-      if (Math.abs(currentHeight - targetHeight) > 0.01) {
-        const newHeight = currentHeight + (targetHeight - currentHeight) * 0.1;
-        setCurrentHeight(newHeight);
-        proteinRef.current.position.y = newHeight;
-      }
+    // Smooth height transition
+    if (Math.abs(currentHeight - targetHeight) > 0.01) {
+      const newHeight = currentHeight + (targetHeight - currentHeight) * 0.1;
+      setCurrentHeight(newHeight);
     }
   });
 

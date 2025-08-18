@@ -82,10 +82,15 @@ const ProteinViewer: React.FC<ProteinViewerProps> = ({ pdbId, onLoad, onError })
             defaultRepresentation: true
           });
           
-          component.addRepresentation('cartoon', {
-            colorScheme: 'chainname',
-            quality: 'medium'
-          });
+          // Use type assertion to handle NGL Component type properly
+          const proteinComponent = component as any;
+          
+          if (proteinComponent && typeof proteinComponent.addRepresentation === 'function') {
+            proteinComponent.addRepresentation('cartoon', {
+              colorScheme: 'chainname',
+              quality: 'medium'
+            });
+          }
           
           stage.autoView();
           

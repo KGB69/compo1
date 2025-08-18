@@ -1,6 +1,5 @@
 import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import { Controllers, Hands } from '@react-three/xr';
 import { Plane, Box } from '@react-three/drei';
 import * as THREE from 'three';
 import ProteinInWorld from './ProteinInWorld';
@@ -32,8 +31,6 @@ function VRPlayer() {
   return (
     <group ref={playerRef}>
       {/* Oculus Quest optimized VR setup */}
-      <Controllers />
-      <Hands />
     </group>
   );
 }
