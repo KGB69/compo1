@@ -82,11 +82,9 @@ const ProteinViewer: React.FC<ProteinViewerProps> = ({ pdbId, onLoad, onError })
             defaultRepresentation: true
           });
           
-          // Use type assertion to handle NGL Component type properly
-          const proteinComponent = component as any;
-          
-          if (proteinComponent && typeof proteinComponent.addRepresentation === 'function') {
-            proteinComponent.addRepresentation('cartoon', {
+          // Handle NGL component properly with type assertion
+          if (component && typeof component === 'object' && 'addRepresentation' in component) {
+            (component as any).addRepresentation('cartoon', {
               colorScheme: 'chainname',
               quality: 'medium'
             });
