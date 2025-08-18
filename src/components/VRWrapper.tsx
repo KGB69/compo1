@@ -1,9 +1,13 @@
 import { Canvas } from '@react-three/fiber';
-import { XR, Controllers, Hands } from '@react-three/xr';
+import { XR } from '@react-three/xr';
 import VRWorld from './VRWorld';
 
 // VR Wrapper component optimized for Oculus Quest
-export default function VRWrapper() {
+interface VRWrapperProps {
+  children: React.ReactNode;
+}
+
+export default function VRWrapper({ children }: VRWrapperProps) {
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
       <Canvas 
@@ -16,8 +20,7 @@ export default function VRWrapper() {
         }}
       >
         <XR>
-          <Controllers />
-          <Hands />
+          {children}
           <VRWorld />
         </XR>
       </Canvas>
