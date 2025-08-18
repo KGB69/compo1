@@ -1,5 +1,4 @@
 import { Canvas } from '@react-three/fiber';
-import { XR } from '@react-three/xr';
 import VRWorld from './VRWorld';
 
 // VR Wrapper component optimized for Oculus Quest
@@ -19,10 +18,8 @@ export default function VRWrapper({ children }: VRWrapperProps) {
           powerPreference: "high-performance"
         }}
       >
-        <XR>
-          {children}
-          <VRWorld />
-        </XR>
+        {children}
+        <VRWorld />
       </Canvas>
     </div>
   );

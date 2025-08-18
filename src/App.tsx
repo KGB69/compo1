@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { XR } from '@react-three/xr';
 import ImmersiveProteinViewer from './components/ImmersiveProteinViewer';
 import VRWorld from './components/VRWorld';
 import PCFallbackWorld from './components/PCFallbackWorld';
@@ -62,9 +61,7 @@ function App() {
               camera={{ position: [0, 1.6, 3], fov: 75 }}
               style={{ width: '100%', height: '100%' }}
             >
-              <XR>
-                <VRWorld />
-              </XR>
+              <VRWorld />
             </Canvas>
           </div>
         )}
