@@ -172,3 +172,17 @@ body {
     min-height: 300px;
   }
 }
+
+.install-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 24px;
+  background: #1a1a2e;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 1000;
+  font-size: 14px;
+}

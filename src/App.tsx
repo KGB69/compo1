@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import ImmersiveProteinViewer from './components/ImmersiveProteinViewer';
 import VRWorld from './components/VRWorld';
@@ -9,6 +9,32 @@ import './App-wide-screen.css';
 function App() {
   const [currentProtein, setCurrentProtein] = useState<string>('1A1U');
   const [mode, setMode] = useState<'viewer' | 'pc' | 'vr'>('viewer');
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      installPrompt.userChoice.then((choiceResult: any) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+        }
+        setInstallPrompt(null);
+      });
+    }
+  };
 
   const handleProteinChange = (pdbId: string) => {
     setCurrentProtein(pdbId);
@@ -16,6 +42,11 @@ function App() {
 
   return (
     <div className="app">
+      {installPrompt && (
+        <button className="install-button" onClick={handleInstallClick}>
+          Install ProteinVR
+        </button>
+      )}
       <div className="mode-selector">
         <button 
           className={mode === 'viewer' ? 'active' : ''}

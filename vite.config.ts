@@ -23,7 +23,7 @@ export default defineConfig({
       injectRegister: 'auto'
     })
   ],
-  base: './',
+  base: '/compo1/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

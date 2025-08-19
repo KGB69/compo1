@@ -8,8 +8,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "deploy": "npm run build && netlify deploy --prod"
+    "preview": "vite preview"
   },
   "keywords": [
     "protein",
@@ -23,10 +22,10 @@
   ],
   "author": "Protein Viewer Team",
   "license": "MIT",
-  "homepage": "https://protein-viewer-vr.netlify.app",
+  "homepage": "https://KGB69.github.io/compo1",
   "repository": {
     "type": "git",
-    "url": "https://github.com/username/protein-viewer-vr"
+    "url": "https://github.com/KGB69/compo1.git"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.3",
