@@ -45,7 +45,6 @@ export default function ProteinInWorld({
   }, [pdbId, viewMode, scale]);
 
   const createProteinFromPDB = (pdbData: string, mode: string, scaleFactor: number): THREE.Group => {
-    const proteinGroup = new THREE.Group();
     const lines = pdbData.split('\n');
     const atoms: { x: number; y: number; z: number; element: string }[] = [];
     const residues: { x: number; y: number; z: number }[] = [];

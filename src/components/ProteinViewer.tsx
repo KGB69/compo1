@@ -57,10 +57,12 @@ const ProteinViewer: React.FC<ProteinViewerProps> = ({ pdbId, onLoad, onError })
           });
 
           // Add cartoon representation
-          component.addRepresentation('cartoon', {
-            colorScheme: 'chainname',
-            quality: 'medium'
-          });
+          if (component) {
+            component.addRepresentation('cartoon', {
+              colorScheme: 'chainname',
+              quality: 'medium'
+            });
+          }
 
           // Auto-zoom to fit
           stage.autoView();
@@ -82,11 +84,13 @@ const ProteinViewer: React.FC<ProteinViewerProps> = ({ pdbId, onLoad, onError })
             defaultRepresentation: true
           });
           
-          // @ts-ignore - Force type assertion to bypass TypeScript type checking
-          (component as any)?.addRepresentation?.('cartoon', {
-            colorScheme: 'chainname',
-            quality: 'medium'
-          });
+          if (component) {
+            // @ts-ignore - Force type assertion to bypass TypeScript type checking
+            (component as any)?.addRepresentation?.('cartoon', {
+              colorScheme: 'chainname',
+              quality: 'medium'
+            });
+          }
           
           stage.autoView();
           
