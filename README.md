@@ -1,4 +1,4 @@
-# Protein Visualization Explorer
+# Protein Visualization Explorer -i
 
 A lightweight, modern web application for visualizing 3D protein structures from the Protein Data Bank (PDB) using Molstar for molecular visualization and React Three Fiber for interactive 3D UI navigation.
 
