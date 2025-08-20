@@ -121,7 +121,11 @@ export default function App(): React.ReactNode {
       <Canvas shadows camera={{ fov: 75, position: [0, 1.6, 5] }}>
           {/* @ts-ignore The `store` prop is required by the current type definitions but is part of a deprecated API. */}
           <XR>
-            <GlobalVRInput onMenuToggle={handleOpenMenu} onBack={handleBack} />
+            <GlobalVRInput 
+              onMenuToggle={handleOpenMenu} 
+              onBack={handleBack} 
+              onMenuSelect={gameState === GameState.MENU ? handleSelectPage.bind(null, PAGES[0]) : undefined} 
+            />
             <Scene />
             <Player 
               gameState={gameState}

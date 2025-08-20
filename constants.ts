@@ -36,5 +36,5 @@ export const PAGES: PageContent[] = [
 
 export const PLAYER_SPEED = 5;
 export const PLAYER_HEIGHT = 1.6;
-export const ROOM_SIZE = 20;
+export const ROOM_SIZE = 30; // Updated to match WhiteRoom.tsx
 export const WALL_HEIGHT = 6;

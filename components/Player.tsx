@@ -66,34 +66,58 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
     }
     
     if (isPresenting && player && controllers.length > 0) {
-        // VR Movement Logic
+        // VR Movement Logic with enhanced debugging and controls
+        // @ts-ignore - XR controller handedness property
         const leftController = controllers.find(c => c.handedness === 'left');
+        
         if (leftController?.inputSource?.gamepad) {
             const axes = leftController.inputSource.gamepad.axes;
-            const stickX = axes[2] || 0;
-            const stickY = axes[3] || 0;
+            
+            // Quest controllers typically use axes[2] and axes[3] for the thumbstick
+            // But some devices might use axes[0] and axes[1], so we check both
+            let stickX = 0;
+            let stickY = 0;
+            
+            // Check primary axes (0,1)
+            if (Math.abs(axes[0]) > 0.1 || Math.abs(axes[1]) > 0.1) {
+                stickX = axes[0];
+                stickY = axes[1];
+                console.log('Using primary axes for movement:', stickX, stickY);
+            } 
+            // Check secondary axes (2,3)
+            else if (Math.abs(axes[2]) > 0.1 || Math.abs(axes[3]) > 0.1) {
+                stickX = axes[2];
+                stickY = axes[3];
+                console.log('Using secondary axes for movement:', stickX, stickY);
+            }
 
+            // Apply movement if stick is being used
             if (Math.abs(stickX) > 0.1 || Math.abs(stickY) > 0.1) {
+                // Get camera direction for movement relative to where user is looking
                 const quaternion = new THREE.Quaternion();
                 state.camera.getWorldQuaternion(quaternion);
                 const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
-                euler.x = 0;
-                euler.z = 0;
+                euler.x = 0; // Remove pitch (up/down)
+                euler.z = 0; // Remove roll
 
+                // Create movement vector and apply camera rotation
                 const moveVector = new THREE.Vector3(stickX, 0, stickY);
                 moveVector.applyEuler(euler).normalize();
 
-                const speed = PLAYER_SPEED * delta;
+                // Apply speed and move player
+                const speed = PLAYER_SPEED * delta * 1.5; // Increased speed for better responsiveness
                 player.position.add(moveVector.multiplyScalar(speed));
+                
+                console.log('VR movement applied:', moveVector);
             }
         }
         
-        // VR Collision detection
-        const halfRoomSize = ROOM_SIZE / 2;
+        // VR Collision detection with larger room size (30m)
+        const halfRoomSize = 30 / 2; // Using the updated room size from WhiteRoom.tsx
         const playerPadding = 0.5;
         player.position.x = THREE.MathUtils.clamp(player.position.x, -halfRoomSize + playerPadding, halfRoomSize - playerPadding);
         player.position.z = THREE.MathUtils.clamp(player.position.z, -halfRoomSize + playerPadding, halfRoomSize - playerPadding);
-        player.position.y = 0;
+        player.position.y = 0; // Keep player on the ground
     } else {
         // Desktop Movement Logic
         velocity.current.x -= velocity.current.x * 10.0 * delta;
