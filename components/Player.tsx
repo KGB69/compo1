@@ -132,6 +132,9 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
   const lastHeadPosition = useRef<THREE.Vector3>(new THREE.Vector3());
   const headVelocity = useRef<THREE.Vector3>(new THREE.Vector3());
   
+  // Direct access to WebXR input sources
+  const xrInputSources = useRef<any[]>([]);
+  
   useFrame((state, delta) => {
     const canMove = gameState === GameState.EXPLORING || gameState === GameState.MENU;
 
@@ -142,14 +145,33 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
     
     // Check if controllers are available (not too frequently)
     if (isPresenting && performance.now() - lastControllerCheck.current > 1000) {
-      const hasControllers = controllers.length > 0 && 
+      // Update direct WebXR input sources
+      if (player?.session) {
+        const sources = player.session.inputSources;
+        xrInputSources.current = Array.from(sources || []);
+        
+        if (xrInputSources.current.length > 0) {
+          vrConsole.log(`Direct WebXR: Found ${xrInputSources.current.length} input sources`);
+        }
+      }
+      
+      // Check for controllers using both methods
+      const hasControllersFromReactXR = controllers.length > 0 && 
         (controllers.find(c => c.handedness === 'left') || controllers.find(c => c.handedness === 'right'));
+      
+      const hasControllersFromWebXR = xrInputSources.current.length > 0 &&
+        (xrInputSources.current.find(source => source.handedness === 'left') || 
+         xrInputSources.current.find(source => source.handedness === 'right'));
+      
+      const hasControllers = hasControllersFromReactXR || hasControllersFromWebXR;
       
       setControllersAvailable(hasControllers);
       lastControllerCheck.current = performance.now();
       
       if (!hasControllers) {
         vrConsole.log('No controllers detected - using fallback controls');
+      } else if (hasControllersFromWebXR && !hasControllersFromReactXR) {
+        vrConsole.log('Controllers detected via direct WebXR API but not via react-three/xr');
       }
     }
     
@@ -176,50 +198,95 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
       }
       
       // Only try controller-based movement if controllers are available
-      if (controllers.length > 0) {
+      if (controllers.length > 0 || xrInputSources.current.length > 0) {
         // VR Movement Logic with enhanced debugging and controls
+        // Try to get controllers from both direct WebXR and react-three/xr
         // @ts-ignore - XR controller handedness property
         const leftController = controllers.find(c => c.handedness === 'left');
         // @ts-ignore - XR controller handedness property
         const rightController = controllers.find(c => c.handedness === 'right');
         
+        // Direct WebXR input sources
+        const leftSource = xrInputSources.current.find(source => source.handedness === 'left');
+        const rightSource = xrInputSources.current.find(source => source.handedness === 'right');
+        
         let debugInfo = '';
         
         // Show controller connection status
-        debugInfo += `Left: ${leftController ? 'Connected' : 'Not connected'}\n`;
-        debugInfo += `Right: ${rightController ? 'Connected' : 'Not connected'}\n`;
+        const leftConnected = leftController || leftSource;
+        const rightConnected = rightController || rightSource;
+        debugInfo += `Left: ${leftConnected ? 'Connected' : 'Not connected'}\n`;
+        debugInfo += `Right: ${rightConnected ? 'Connected' : 'Not connected'}\n`;
+        
+        // Show source of controller detection
+        if (leftConnected) {
+          debugInfo += `Left source: ${leftController ? 'react-xr' : ''}${leftController && leftSource ? '+' : ''}${leftSource ? 'WebXR' : ''}\n`;
+        }
+        if (rightConnected) {
+          debugInfo += `Right source: ${rightController ? 'react-xr' : ''}${rightController && rightSource ? '+' : ''}${rightSource ? 'WebXR' : ''}\n`;
+        }
         
         // Try multiple movement methods for compatibility
         let stickX = 0;
         let stickY = 0;
         let axisUsed = 'none';
         
-        // Method 1: Standard gamepad axes
-        if (leftController?.inputSource?.gamepad) {
-            const axes = leftController.inputSource.gamepad.axes;
+        // Method 1: Direct WebXR gamepad axes (most reliable)
+        if (leftSource?.gamepad) {
+            const axes = leftSource.gamepad.axes;
             
             // Log all available axes for debugging
             if (axes && axes.length > 0) {
-                debugInfo += `Axes: [${axes.map(a => a?.toFixed(2) || 'N/A').join(', ')}]\n`;
+                debugInfo += `WebXR Axes: [${axes.map(a => a?.toFixed(2) || 'N/A').join(', ')}]\n`;
                 
                 // Try all possible axis combinations for movement
                 // Primary thumbstick (most common)
                 if (Math.abs(axes[0]) > 0.1 || Math.abs(axes[1]) > 0.1) {
                     stickX = axes[0];
                     stickY = axes[1];
-                    axisUsed = '0,1';
+                    axisUsed = 'webxr-0,1';
                 } 
                 // Secondary thumbstick
                 else if (Math.abs(axes[2]) > 0.1 || Math.abs(axes[3]) > 0.1) {
                     stickX = axes[2];
                     stickY = axes[3];
-                    axisUsed = '2,3';
+                    axisUsed = 'webxr-2,3';
                 }
                 // Try other possible combinations
                 else if (axes.length > 4 && (Math.abs(axes[4]) > 0.1 || Math.abs(axes[5]) > 0.1)) {
                     stickX = axes[4];
                     stickY = axes[5];
-                    axisUsed = '4,5';
+                    axisUsed = 'webxr-4,5';
+                }
+            }
+        }
+        
+        // Method 2: Standard react-three/xr gamepad axes (fallback)
+        if (axisUsed === 'none' && leftController?.inputSource?.gamepad) {
+            const axes = leftController.inputSource.gamepad.axes;
+            
+            // Log all available axes for debugging
+            if (axes && axes.length > 0) {
+                debugInfo += `R3F Axes: [${axes.map(a => a?.toFixed(2) || 'N/A').join(', ')}]\n`;
+                
+                // Try all possible axis combinations for movement
+                // Primary thumbstick (most common)
+                if (Math.abs(axes[0]) > 0.1 || Math.abs(axes[1]) > 0.1) {
+                    stickX = axes[0];
+                    stickY = axes[1];
+                    axisUsed = 'r3f-0,1';
+                } 
+                // Secondary thumbstick
+                else if (Math.abs(axes[2]) > 0.1 || Math.abs(axes[3]) > 0.1) {
+                    stickX = axes[2];
+                    stickY = axes[3];
+                    axisUsed = 'r3f-2,3';
+                }
+                // Try other possible combinations
+                else if (axes.length > 4 && (Math.abs(axes[4]) > 0.1 || Math.abs(axes[5]) > 0.1)) {
+                    stickX = axes[4];
+                    stickY = axes[5];
+                    axisUsed = 'r3f-4,5';
                 }
             }
         }
@@ -245,7 +312,30 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
             }
         }
         
-        // Method 3: Try direct button mapping for movement (fallback)
+        // Method 3: Try direct button mapping for movement from WebXR (fallback)
+        if (axisUsed === 'none' && leftSource?.gamepad) {
+            const buttons = leftSource.gamepad.buttons;
+            const buttonMap = {
+                forward: 4, // Example button index
+                backward: 5,
+                left: 6,
+                right: 7
+            };
+            
+            // Check if any movement buttons are pressed
+            if (buttons && buttons.length > Math.max(...Object.values(buttonMap))) {
+                if (buttons[buttonMap.forward]?.pressed) stickY = -1;
+                if (buttons[buttonMap.backward]?.pressed) stickY = 1;
+                if (buttons[buttonMap.left]?.pressed) stickX = -1;
+                if (buttons[buttonMap.right]?.pressed) stickX = 1;
+                
+                if (stickX !== 0 || stickY !== 0) {
+                    axisUsed = 'webxr-button-map';
+                }
+            }
+        }
+        
+        // Method 4: Try direct button mapping from react-three/xr (fallback)
         if (axisUsed === 'none' && leftController?.inputSource?.gamepad) {
             const buttons = leftController.inputSource.gamepad.buttons;
             const buttonMap = {
@@ -256,14 +346,14 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
             };
             
             // Check if any movement buttons are pressed
-            if (buttons.length > Math.max(...Object.values(buttonMap))) {
+            if (buttons && buttons.length > Math.max(...Object.values(buttonMap))) {
                 if (buttons[buttonMap.forward]?.pressed) stickY = -1;
                 if (buttons[buttonMap.backward]?.pressed) stickY = 1;
                 if (buttons[buttonMap.left]?.pressed) stickX = -1;
                 if (buttons[buttonMap.right]?.pressed) stickX = 1;
                 
                 if (stickX !== 0 || stickY !== 0) {
-                    axisUsed = 'button-map';
+                    axisUsed = 'r3f-button-map';
                 }
             }
         }

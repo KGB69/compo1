@@ -20,16 +20,18 @@ class VRConsoleLogger {
       buttons: number[];
       axes: number[];
       lastUpdate: number;
+      source: 'react-xr' | 'webxr' | 'both' | 'none';
     };
     right: {
       connected: boolean;
       buttons: number[];
       axes: number[];
       lastUpdate: number;
+      source: 'react-xr' | 'webxr' | 'both' | 'none';
     };
   } = {
-    left: { connected: false, buttons: [], axes: [], lastUpdate: 0 },
-    right: { connected: false, buttons: [], axes: [], lastUpdate: 0 }
+    left: { connected: false, buttons: [], axes: [], lastUpdate: 0, source: 'none' },
+    right: { connected: false, buttons: [], axes: [], lastUpdate: 0, source: 'none' }
   };
 
   private constructor() {}
@@ -57,12 +59,13 @@ class VRConsoleLogger {
     console.log(`[VRConsole] ${message}`);
   }
   
-  public updateControllerInfo(hand: 'left' | 'right', connected: boolean, buttons?: number[], axes?: number[]): void {
+  public updateControllerInfo(hand: 'left' | 'right', connected: boolean, buttons?: number[], axes?: number[], source?: 'react-xr' | 'webxr' | 'both'): void {
     this.controllerInfo[hand] = {
       connected,
       buttons: buttons || [],
       axes: axes || [],
-      lastUpdate: Date.now()
+      lastUpdate: Date.now(),
+      source: source || (connected ? 'react-xr' : 'none')
     };
     
     // Notify listeners of controller update
@@ -106,8 +109,8 @@ export const useVRConsole = () => {
   return {
     log: (message: string) => vrConsole.log(message),
     clear: () => vrConsole.clear(),
-    updateControllerInfo: (hand: 'left' | 'right', connected: boolean, buttons?: number[], axes?: number[]) => 
-      vrConsole.updateControllerInfo(hand, connected, buttons, axes),
+    updateControllerInfo: (hand: 'left' | 'right', connected: boolean, buttons?: number[], axes?: number[], source?: 'react-xr' | 'webxr' | 'both') => 
+      vrConsole.updateControllerInfo(hand, connected, buttons, axes, source),
     getControllerInfo: () => vrConsole.getControllerInfo()
   };
 };
@@ -297,6 +300,17 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
       context.fillStyle = controllerInfo.left.connected ? '#66ff66' : '#ff6666';
       context.fillText(`Status: ${controllerInfo.left.connected ? 'CONNECTED' : 'DISCONNECTED'}`, 40, 110);
       
+      // Show source of controller detection
+      if (controllerInfo.left.connected) {
+        let sourceColor = '#ffffff';
+        if (controllerInfo.left.source === 'webxr') sourceColor = '#ffaa00';
+        if (controllerInfo.left.source === 'react-xr') sourceColor = '#00aaff';
+        if (controllerInfo.left.source === 'both') sourceColor = '#aaffaa';
+        
+        context.fillStyle = sourceColor;
+        context.fillText(`Source: ${controllerInfo.left.source.toUpperCase()}`, 200, 110);
+      }
+      
       if (controllerInfo.left.connected) {
         context.fillStyle = '#ffffff';
         context.fillText(`Buttons: ${controllerInfo.left.buttons.length}`, 40, 140);
@@ -328,6 +342,17 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
       context.fillStyle = controllerInfo.right.connected ? '#66ff66' : '#ff6666';
       context.fillText(`Status: ${controllerInfo.right.connected ? 'CONNECTED' : 'DISCONNECTED'}`, 40, 300);
       
+      // Show source of controller detection
+      if (controllerInfo.right.connected) {
+        let sourceColor = '#ffffff';
+        if (controllerInfo.right.source === 'webxr') sourceColor = '#ffaa00';
+        if (controllerInfo.right.source === 'react-xr') sourceColor = '#00aaff';
+        if (controllerInfo.right.source === 'both') sourceColor = '#aaffaa';
+        
+        context.fillStyle = sourceColor;
+        context.fillText(`Source: ${controllerInfo.right.source.toUpperCase()}`, 200, 300);
+      }
+      
       if (controllerInfo.right.connected) {
         context.fillStyle = '#ffffff';
         context.fillText(`Buttons: ${controllerInfo.right.buttons.length}`, 40, 330);
@@ -350,11 +375,19 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
         context.fillText(`Active axes: ${activeAxes.length > 0 ? activeAxes.join(', ') : 'None'}`, 40, 420);
       }
       
-      // Update help text
+      // Add help text
       context.fillStyle = '#aaaaaa';
       context.font = '16px monospace';
-      context.fillText('Press any button to test controllers', 20, 470);
-      context.fillText('Updates every frame when connected', 20, 490);
+      context.fillText('Press any button to test controllers', 20, 450);
+      context.fillText('Updates every frame when connected', 20, 470);
+      
+      // Add source legend
+      context.fillStyle = '#00aaff';
+      context.fillText('REACT-XR: Using react-three/xr API', 20, 490);
+      context.fillStyle = '#ffaa00';
+      context.fillText('WEBXR: Using direct WebXR API', 260, 490);
+      context.fillStyle = '#aaffaa';
+      context.fillText('BOTH: Detected by both APIs', 20, 510);
       
       texture.needsUpdate = true;
     }
@@ -365,7 +398,8 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
 
 // Export a helper to monitor controller events
 export const useControllerMonitor = () => {
-  const { controllers } = useXR();
+  const { controllers, player } = useXR();
+  const xrInputSources = useRef<any[]>([]);
   
   // Set up event listeners for controllers
   useEffect(() => {
@@ -436,22 +470,72 @@ export const useControllerMonitor = () => {
   
   // Update controller info every frame
   useFrame(() => {
+    // First check direct WebXR input sources
+    if (player?.session) {
+      const sources = player.session.inputSources;
+      xrInputSources.current = Array.from(sources || []);
+      
+      // Process WebXR input sources
+      xrInputSources.current.forEach(source => {
+        const hand = source.handedness;
+        if (hand === 'left' || hand === 'right') {
+          if (source.gamepad) {
+            const gamepad = source.gamepad;
+            const buttons = gamepad.buttons.map(b => b?.value || 0);
+            const axes = gamepad.axes || [];
+            
+            // Check if this controller is also detected by react-three/xr
+            const isAlsoInReactXR = controllers.some(c => c.handedness === hand);
+            const source = isAlsoInReactXR ? 'both' : 'webxr';
+            
+            // Update controller info
+            vrConsole.updateControllerInfo(hand, true, buttons, axes, source);
+          } else {
+            // WebXR controller without gamepad
+            const isAlsoInReactXR = controllers.some(c => c.handedness === hand);
+            const source = isAlsoInReactXR ? 'both' : 'webxr';
+            vrConsole.updateControllerInfo(hand, true, [], [], source);
+          }
+        }
+      });
+    }
+    
+    // Then check react-three/xr controllers
     controllers.forEach(controller => {
       // @ts-ignore - XR controller handedness property
       const hand = controller.handedness;
       
       if (hand === 'left' || hand === 'right') {
-        if (controller.inputSource?.gamepad) {
-          const gamepad = controller.inputSource.gamepad;
-          const buttons = gamepad.buttons.map(b => b?.value || 0);
-          const axes = gamepad.axes || [];
-          
-          // Update controller info
-          vrConsole.updateControllerInfo(hand, true, buttons, axes);
-        } else {
-          // Controller connected but no gamepad
-          vrConsole.updateControllerInfo(hand, true, [], []);
+        // Check if this controller is already detected by WebXR
+        const isAlsoInWebXR = xrInputSources.current.some(source => source.handedness === hand);
+        
+        // Only update if not already detected by WebXR to avoid overwriting
+        if (!isAlsoInWebXR) {
+          if (controller.inputSource?.gamepad) {
+            const gamepad = controller.inputSource.gamepad;
+            const buttons = gamepad.buttons.map(b => b?.value || 0);
+            const axes = gamepad.axes || [];
+            
+            // Update controller info
+            vrConsole.updateControllerInfo(hand, true, buttons, axes, 'react-xr');
+          } else {
+            // Controller connected but no gamepad
+            vrConsole.updateControllerInfo(hand, true, [], [], 'react-xr');
+          }
         }
+      }
+    });
+    
+    // Check for disconnected controllers
+    ['left', 'right'].forEach(hand => {
+      const controllerInfo = vrConsole.getControllerInfo();
+      const isConnectedInWebXR = xrInputSources.current.some(source => source.handedness === hand);
+      const isConnectedInReactXR = controllers.some(c => c.handedness === hand);
+      
+      // If controller was connected but now isn't connected in either source
+      if (controllerInfo[hand].connected && !isConnectedInWebXR && !isConnectedInReactXR) {
+        vrConsole.updateControllerInfo(hand as 'left' | 'right', false, [], [], 'none');
+        vrConsole.log(`${hand} controller disconnected`);
       }
     });
   });

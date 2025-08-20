@@ -5,6 +5,16 @@ import { useXR, Interactive } from '@react-three/xr';
 import * as THREE from 'three';
 import { vrConsole } from './VRConsole';
 
+// Define navigator.xr for TypeScript
+declare global {
+  interface Navigator {
+    xr?: {
+      isSessionSupported(mode: string): Promise<boolean>;
+      requestSession(mode: string, options?: any): Promise<any>;
+    };
+  }
+}
+
 interface GlobalVRInputProps {
   onMenuToggle: () => void;
   onBack: () => void;
@@ -22,6 +32,9 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
   const [controllerStatus, setControllerStatus] = useState<{left: boolean, right: boolean}>({left: false, right: false});
   const controllerRefs = useRef<{[key: string]: any}>({});
   const reconnectInterval = useRef<number | null>(null);
+  
+  // Direct access to WebXR input sources
+  const xrInputSources = useRef<any[]>([]);
   
   // Track controller button states to prevent multiple triggers
   const buttonStates = useRef<{[key: string]: boolean}>({});
@@ -106,17 +119,53 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
     if (!isPresenting || !session) {
       // Clear controller status when exiting VR
       setControllerStatus({left: false, right: false});
+      xrInputSources.current = [];
       return;
     }
     
     vrConsole.log('VR session active - monitoring for controllers');
     
+    // Direct access to WebXR input sources
+    const updateInputSources = () => {
+      if (session) {
+        // Get all input sources directly from the session
+        const sources = session.inputSources;
+        xrInputSources.current = Array.from(sources || []);
+        
+        vrConsole.log(`Direct WebXR: Found ${xrInputSources.current.length} input sources`);
+        
+        // Log details about each input source
+        xrInputSources.current.forEach((source, index) => {
+          const hand = source.handedness || 'unknown';
+          vrConsole.log(`Input source ${index}: ${hand} hand, ${source.targetRayMode} mode`);
+          
+          // Check if gamepad is available
+          if (source.gamepad) {
+            vrConsole.log(`Gamepad found for ${hand}: ${source.gamepad.id || 'unknown'}, buttons: ${source.gamepad.buttons.length}, axes: ${source.gamepad.axes.length}`);
+          } else {
+            vrConsole.log(`No gamepad for ${hand} input source`);
+          }
+        });
+      }
+    };
+    
     // Function to check for controllers and set up listeners
     const checkForControllers = () => {
+      // Update direct WebXR input sources
+      updateInputSources();
+      
       // Clear previous controller status
       const newStatus = {left: false, right: false};
       
-      // Process all controllers
+      // First check direct WebXR input sources
+      xrInputSources.current.forEach(source => {
+        const hand = source.handedness;
+        if (hand === 'left' || hand === 'right') {
+          newStatus[hand] = true;
+        }
+      });
+      
+      // Then process controllers from react-three/xr
       controllers.forEach((controller, index) => {
         // @ts-ignore - XR controller handedness property
         const hand = controller.handedness || `controller-${index}`;
@@ -176,6 +225,7 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
     
     // Add event listeners to session
     if (session) {
+      // Listen for input source changes
       session.addEventListener('inputsourceschange', (event) => {
         vrConsole.log('XR input sources changed');
         
@@ -184,6 +234,11 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
           vrConsole.log(`${event.added.length} input sources added`);
           event.added.forEach(source => {
             vrConsole.log(`Input source added: ${source.handedness || 'unknown'} hand`);
+            
+            // Try to access gamepad immediately
+            if (source.gamepad) {
+              vrConsole.log(`Gamepad found for ${source.handedness}: ${source.gamepad.id || 'unknown'}`);
+            }
           });
         }
         
@@ -192,9 +247,19 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
           vrConsole.log(`${event.removed.length} input sources removed`);
         }
         
+        // Update input sources list
+        updateInputSources();
+        
         // Check for controllers again
         setTimeout(checkForControllers, 100);
       });
+      
+      // Try to directly access navigator.xr for additional debugging
+      if (window.navigator && window.navigator.xr) {
+        vrConsole.log('Navigator XR API is available');
+      } else {
+        vrConsole.log('Navigator XR API not found');
+      }
     }
     
     return () => {
@@ -230,25 +295,54 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
   };
 
   useFrame(() => {
-    if (!isPresenting || controllers.length === 0) {
+    if (!isPresenting) {
       return;
     }
 
-    // @ts-ignore - XR controller handedness property
-    const leftController = controllers.find(c => c.handedness === 'left');
-    // @ts-ignore - XR controller handedness property
-    const rightController = controllers.find(c => c.handedness === 'right');
+    // Try to get controllers from both direct WebXR and react-three/xr
+    let leftController, rightController;
+    let leftGamepad, rightGamepad;
     
-    // Skip if no controllers found
-    if (!leftController && !rightController) {
+    // First try direct WebXR input sources (more reliable)
+    if (xrInputSources.current.length > 0) {
+      const leftSource = xrInputSources.current.find(source => source.handedness === 'left');
+      const rightSource = xrInputSources.current.find(source => source.handedness === 'right');
+      
+      if (leftSource) {
+        leftGamepad = leftSource.gamepad;
+      }
+      
+      if (rightSource) {
+        rightGamepad = rightSource.gamepad;
+      }
+    }
+    
+    // Fallback to react-three/xr controllers if needed
+    if (controllers.length > 0) {
+      // @ts-ignore - XR controller handedness property
+      leftController = controllers.find(c => c.handedness === 'left');
+      // @ts-ignore - XR controller handedness property
+      rightController = controllers.find(c => c.handedness === 'right');
+      
+      // Get gamepads from controllers if not already found
+      if (!leftGamepad && leftController?.inputSource?.gamepad) {
+        leftGamepad = leftController.inputSource.gamepad;
+      }
+      
+      if (!rightGamepad && rightController?.inputSource?.gamepad) {
+        rightGamepad = rightController.inputSource.gamepad;
+      }
+    }
+    
+    // Skip if no controllers or gamepads found
+    if (!leftGamepad && !rightGamepad && !leftController && !rightController) {
       return;
     }
     
     // Process left controller for menu button (typically Y/B button)
-    if (leftController?.inputSource?.gamepad) {
-      const gamepad = leftController.inputSource.gamepad;
-      const buttons = gamepad.buttons;
-      const axes = gamepad.axes;
+    if (leftGamepad) {
+      const buttons = leftGamepad.buttons;
+      const axes = leftGamepad.axes;
       
       // Log axes for movement debugging
       if (axes && axes.length >= 2) {
@@ -262,7 +356,8 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
       }
       
       // Check for menu button (typically button 3 = Y on Quest)
-      const menuButtonIndices = [3, 4, 5, 6]; // Try multiple indices
+      // Try multiple indices since button mapping can vary by device
+      const menuButtonIndices = [3, 4, 5, 6, 7]; // Extended to try more indices
       
       for (const index of menuButtonIndices) {
         if (index < buttons.length) {
@@ -275,15 +370,24 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
           }
         }
       }
+      
+      // Log all button states for debugging
+      if (buttons) {
+        for (let i = 0; i < buttons.length; i++) {
+          const isPressed = buttons[i]?.pressed || false;
+          if (isPressed) {
+            vrConsole.log(`Left controller button ${i} is pressed`);
+          }
+        }
+      }
     }
     
     // Process right controller for select and back actions
-    if (rightController?.inputSource?.gamepad) {
-      const gamepad = rightController.inputSource.gamepad;
-      const buttons = gamepad.buttons;
+    if (rightGamepad) {
+      const buttons = rightGamepad.buttons;
       
       // Check for select button (typically trigger = button 0)
-      if (buttons.length > 0) {
+      if (buttons && buttons.length > 0) {
         const isSelectPressed = buttons[0]?.pressed || false;
         
         if (wasButtonJustPressed('right', 0, isSelectPressed) && onMenuSelect) {
@@ -293,7 +397,7 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
       }
       
       // Check for back button (typically grip = button 1)
-      if (buttons.length > 1) {
+      if (buttons && buttons.length > 1) {
         const isBackPressed = buttons[1]?.pressed || false;
         
         if (wasButtonJustPressed('right', 1, isBackPressed)) {
@@ -302,12 +406,13 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
         }
       }
       
-      // Log all button presses for debugging
-      for (let i = 0; i < buttons.length; i++) {
-        const isPressed = buttons[i]?.pressed || false;
-        
-        if (wasButtonJustPressed('right', i, isPressed)) {
-          vrConsole.log(`Right controller button ${i} pressed`);
+      // Log all button states for debugging
+      if (buttons) {
+        for (let i = 0; i < buttons.length; i++) {
+          const isPressed = buttons[i]?.pressed || false;
+          if (isPressed) {
+            vrConsole.log(`Right controller button ${i} is pressed`);
+          }
         }
       }
     }
