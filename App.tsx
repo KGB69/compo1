@@ -7,8 +7,16 @@ import { Player } from './components/Player';
 import { RadialMenu } from './components/RadialMenu';
 import { ImmersivePage } from './components/ImmersivePage';
 import { GlobalVRInput } from './components/GlobalVRInput';
+import { VRConsole, useControllerMonitor, vrConsole } from './components/VRConsole';
 import { GameState, PageContent } from './types';
 import { PAGES } from './constants';
+
+// Controller Monitor Component
+const ControllerMonitor: React.FC = () => {
+  // Use the controller monitor hook
+  useControllerMonitor();
+  return null;
+};
 
 export default function App(): React.ReactNode {
   const [gameState, setGameState] = useState<GameState>(GameState.START);
@@ -121,6 +129,10 @@ export default function App(): React.ReactNode {
       <Canvas shadows camera={{ fov: 75, position: [0, 1.6, 5] }}>
           {/* @ts-ignore The `store` prop is required by the current type definitions but is part of a deprecated API. */}
           <XR>
+            {/* VR Console for debugging in headset */}
+            <VRConsole maxLines={15} />
+            <ControllerMonitor />
+            
             <GlobalVRInput 
               onMenuToggle={handleOpenMenu} 
               onBack={handleBack} 

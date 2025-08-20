@@ -3,6 +3,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { useXR, Interactive } from '@react-three/xr';
 import * as THREE from 'three';
+import { vrConsole } from './VRConsole';
 
 interface GlobalVRInputProps {
   onMenuToggle: () => void;
@@ -19,65 +20,81 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
   const [debugText, setDebugText] = useState<string>('');
   const debugTextRef = useRef<THREE.Mesh | undefined>(undefined);
   
-  // Debug controller buttons
+  // Track controller button states to prevent multiple triggers
+  const buttonStates = useRef<{[key: string]: boolean}>({});
+  
+  // Set up controller event listeners
   useEffect(() => {
     if (isPresenting) {
-      console.log('VR mode active - controller mappings loaded');
+      vrConsole.log('VR mode active - setting up controller event listeners');
       
-      // Create debug text in VR
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 256;
-      const context = canvas.getContext('2d');
-      if (context) {
-        context.fillStyle = 'black';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.fillStyle = 'white';
-        context.font = '24px Arial';
-        context.fillText('VR Debug: Press controllers to test', 20, 40);
-      }
+      // Function to set up event listeners for a controller
+      const setupControllerListeners = (controller, index) => {
+        // @ts-ignore - XR controller handedness property
+        const hand = controller.handedness || `controller-${index}`;
+        vrConsole.log(`Setting up listeners for ${hand} controller`);
+        
+        // Select event (trigger)
+        controller.addEventListener('selectstart', () => {
+          vrConsole.log(`${hand} controller: select pressed`);
+          
+          if (hand === 'right' && onMenuSelect) {
+            vrConsole.log('Select action triggered');
+            onMenuSelect();
+          }
+        });
+        
+        // Squeeze event (grip)
+        controller.addEventListener('squeezestart', () => {
+          vrConsole.log(`${hand} controller: squeeze pressed`);
+          
+          if (hand === 'right') {
+            vrConsole.log('Back action triggered');
+            onBack();
+          }
+        });
+        
+        // Connect gamepad events
+        const connectGamepad = () => {
+          if (controller.inputSource?.gamepad) {
+            vrConsole.log(`${hand} controller gamepad connected`);
+          }
+        };
+        
+        // Try to connect immediately
+        connectGamepad();
+        
+        // Also try on the next frame (sometimes needed)
+        setTimeout(connectGamepad, 100);
+      };
       
-      const texture = new THREE.CanvasTexture(canvas);
-      const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
-      const geometry = new THREE.PlaneGeometry(1, 0.5);
-      const mesh = new THREE.Mesh(geometry, material);
+      // Set up listeners for all controllers
+      controllers.forEach((controller, index) => {
+        setupControllerListeners(controller, index);
+      });
       
-      // Position the debug panel in front of the player
-      mesh.position.set(0, 1.6, -1.5);
-      scene.add(mesh);
-      debugTextRef.current = mesh;
+      // Listen for new controllers
+      const onControllerConnected = (e) => {
+        vrConsole.log(`New controller connected: ${e.data.handedness || 'unknown hand'}`);
+        setupControllerListeners(e.data, controllers.length);
+      };
+      
+      // @ts-ignore - Event name
+      player.addEventListener('controlleradded', onControllerConnected);
       
       return () => {
-        scene.remove(mesh);
+        // @ts-ignore - Event name
+        player.removeEventListener('controlleradded', onControllerConnected);
       };
     }
-  }, [isPresenting, scene]);
+  }, [isPresenting, controllers, player, onMenuSelect, onBack]);
   
-  // Update debug text
-  const updateDebugText = (text: string) => {
-    setDebugText(text);
-    
-    if (debugTextRef.current) {
-      const material = debugTextRef.current.material as THREE.MeshBasicMaterial;
-      const texture = material.map as THREE.CanvasTexture;
-      const canvas = texture.image;
-      const context = canvas.getContext('2d');
-      
-      if (context) {
-        context.fillStyle = 'black';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.fillStyle = 'white';
-        context.font = '24px Arial';
-        context.fillText('VR Debug:', 20, 40);
-        
-        const lines = text.split('\n');
-        lines.forEach((line, i) => {
-          context.fillText(line, 20, 80 + i * 30);
-        });
-      }
-      
-      texture.needsUpdate = true;
-    }
+  // Helper function to check if a button was just pressed (rising edge detection)
+  const wasButtonJustPressed = (controllerId: string, buttonIndex: number, isPressed: boolean) => {
+    const buttonId = `${controllerId}-${buttonIndex}`;
+    const wasPressed = buttonStates.current[buttonId] || false;
+    buttonStates.current[buttonId] = isPressed;
+    return isPressed && !wasPressed;
   };
 
   useFrame(() => {
@@ -90,117 +107,98 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
     // @ts-ignore - XR controller handedness property
     const rightController = controllers.find(c => c.handedness === 'right');
     
-    let debugInfo = '';
-    
-    // Show controller connection status
-    debugInfo += `Left controller: ${leftController ? 'Connected' : 'Not connected'}\n`;
-    debugInfo += `Right controller: ${rightController ? 'Connected' : 'Not connected'}\n`;
-    
-    // Show gamepad axes for movement debugging
-    if (leftController?.inputSource?.gamepad) {
-      const axes = leftController.inputSource.gamepad.axes;
-      debugInfo += `Left stick: X:${axes[0]?.toFixed(2) || 'N/A'}, Y:${axes[1]?.toFixed(2) || 'N/A'} | `;
-      debugInfo += `X:${axes[2]?.toFixed(2) || 'N/A'}, Y:${axes[3]?.toFixed(2) || 'N/A'}\n`;
+    // Skip if no controllers found
+    if (!leftController && !rightController) {
+      return;
     }
     
-    // Debug controller buttons when pressed
-    let leftButtonsPressed = false;
-    let rightButtonsPressed = false;
-    
+    // Process left controller for menu button (typically Y/B button)
     if (leftController?.inputSource?.gamepad) {
-      const buttons = leftController.inputSource.gamepad.buttons;
-      for (let i = 0; i < buttons.length; i++) {
-        if (buttons[i]?.pressed) {
-          leftButtonsPressed = true;
-          console.log(`Left controller button ${i} pressed`);
-          debugInfo += `Left btn ${i} pressed! \n`;
+      const gamepad = leftController.inputSource.gamepad;
+      const buttons = gamepad.buttons;
+      const axes = gamepad.axes;
+      
+      // Log axes for movement debugging
+      if (axes && axes.length >= 2) {
+        const x = axes[0]?.toFixed(2) || 'N/A';
+        const y = axes[1]?.toFixed(2) || 'N/A';
+        
+        // Only log when there's significant movement
+        if (Math.abs(Number(x)) > 0.1 || Math.abs(Number(y)) > 0.1) {
+          vrConsole.log(`Left stick: X:${x}, Y:${y}`);
         }
       }
-    }
-
-    if (rightController?.inputSource?.gamepad) {
-      const buttons = rightController.inputSource.gamepad.buttons;
-      for (let i = 0; i < buttons.length; i++) {
-        if (buttons[i]?.pressed) {
-          rightButtonsPressed = true;
-          console.log(`Right controller button ${i} pressed`);
-          debugInfo += `Right btn ${i} pressed! \n`;
-        }
-      }
-    }
-    
-    // Try all possible button indices for menu toggle
-    const menuButtonIndices = [3, 4, 5]; // Try multiple indices
-    let menuToggled = false;
-    
-    if (leftController?.inputSource?.gamepad) {
+      
+      // Check for menu button (typically button 3 = Y on Quest)
+      const menuButtonIndices = [3, 4, 5, 6]; // Try multiple indices
+      
       for (const index of menuButtonIndices) {
-        const button = leftController.inputSource.gamepad.buttons[index];
-        if (button?.pressed && !menuButtonPressed.current) {
-          console.log(`Menu button (index ${index}) pressed`);
-          debugInfo += `Menu toggled (btn ${index})\n`;
-          onMenuToggle();
-          menuToggled = true;
-          break;
+        if (index < buttons.length) {
+          const isPressed = buttons[index]?.pressed || false;
+          
+          if (wasButtonJustPressed('left', index, isPressed)) {
+            vrConsole.log(`Menu button (${index}) pressed - toggling menu`);
+            onMenuToggle();
+            break;
+          }
         }
-        menuButtonPressed.current = button?.pressed || false;
       }
     }
     
-    // Try all possible button indices for back action
-    const backButtonIndices = [0, 1, 2]; // Try multiple indices
-    let backTriggered = false;
-    
+    // Process right controller for select and back actions
     if (rightController?.inputSource?.gamepad) {
-      for (const index of backButtonIndices) {
-        const button = rightController.inputSource.gamepad.buttons[index];
-        if (button?.pressed && !backButtonPressed.current) {
-          console.log(`Back button (index ${index}) pressed`);
-          debugInfo += `Back triggered (btn ${index})\n`;
-          onBack();
-          backTriggered = true;
-          break;
-        }
-        backButtonPressed.current = button?.pressed || false;
-      }
-    }
-    
-    // Try all possible button indices for select action
-    const selectButtonIndices = [0, 1, 2]; // Try multiple indices
-    let selectTriggered = false;
-    
-    if (rightController?.inputSource?.gamepad && onMenuSelect) {
-      for (const index of selectButtonIndices) {
-        const button = rightController.inputSource.gamepad.buttons[index];
-        if (button?.pressed && !selectButtonPressed.current) {
-          console.log(`Select button (index ${index}) pressed`);
-          debugInfo += `Select triggered (btn ${index})\n`;
+      const gamepad = rightController.inputSource.gamepad;
+      const buttons = gamepad.buttons;
+      
+      // Check for select button (typically trigger = button 0)
+      if (buttons.length > 0) {
+        const isSelectPressed = buttons[0]?.pressed || false;
+        
+        if (wasButtonJustPressed('right', 0, isSelectPressed) && onMenuSelect) {
+          vrConsole.log('Select button pressed - triggering select');
           onMenuSelect();
-          selectTriggered = true;
-          break;
         }
-        selectButtonPressed.current = button?.pressed || false;
       }
-    }
-    
-    // Update debug text if there's activity
-    if (leftButtonsPressed || rightButtonsPressed || menuToggled || backTriggered || selectTriggered) {
-      updateDebugText(debugInfo);
+      
+      // Check for back button (typically grip = button 1)
+      if (buttons.length > 1) {
+        const isBackPressed = buttons[1]?.pressed || false;
+        
+        if (wasButtonJustPressed('right', 1, isBackPressed)) {
+          vrConsole.log('Back button pressed - triggering back');
+          onBack();
+        }
+      }
+      
+      // Log all button presses for debugging
+      for (let i = 0; i < buttons.length; i++) {
+        const isPressed = buttons[i]?.pressed || false;
+        
+        if (wasButtonJustPressed('right', i, isPressed)) {
+          vrConsole.log(`Right controller button ${i} pressed`);
+        }
+      }
     }
   });
 
   return (
     <>
-      {/* Visual controller indicators */}
+      {/* Visual controller indicators - make them visible for debugging */}
       {isPresenting && controllers.map((controller, i) => (
         // @ts-ignore - XR controller handedness property and React Three Fiber JSX elements
         <group key={`controller-indicator-${i}`}>
           {/* @ts-ignore - React Three Fiber JSX elements */}
-          <mesh position={[0, 0, 0]} visible={false}>
+          <mesh 
+            position={[0, 0, 0]} 
+            visible={true} // Make visible for debugging
+            // @ts-ignore - Attach mesh to controller
+            matrix={controller.matrix}
+            matrixAutoUpdate={false}
+          >
             {/* @ts-ignore - React Three Fiber JSX elements */}
             <sphereGeometry args={[0.05, 16, 16]} />
             {/* @ts-ignore - React Three Fiber JSX elements */}
-            <meshBasicMaterial color="#ff0000" />
+            <meshBasicMaterial color={i === 0 ? "#ff0000" : "#0000ff"} />
           </mesh>
         </group>
       ))}

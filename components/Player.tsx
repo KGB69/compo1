@@ -8,6 +8,7 @@ import { usePlayerControls } from '../hooks/useKeyboardControls';
 import { PLAYER_SPEED, PLAYER_HEIGHT, ROOM_SIZE } from '../constants';
 import { GameState } from '../types';
 import { useXR } from '@react-three/xr';
+import { vrConsole } from './VRConsole';
 
 interface PlayerProps {
   gameState: GameState;
@@ -30,6 +31,11 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
   useEffect(() => {
     if (isPresenting) {
       if (isLocked) controlsRef.current?.unlock();
+      
+      // Log initialization to VR console
+      vrConsole.log('VR Player initialized');
+      vrConsole.log(`Room size: ${ROOM_SIZE}x${ROOM_SIZE} meters`);
+      vrConsole.log('Move with left thumbstick');
       
       // Create movement debug text in VR
       const canvas = document.createElement('canvas');
@@ -135,62 +141,116 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
         debugInfo += `Left: ${leftController ? 'Connected' : 'Not connected'}\n`;
         debugInfo += `Right: ${rightController ? 'Connected' : 'Not connected'}\n`;
         
+        // Try multiple movement methods for compatibility
+        let stickX = 0;
+        let stickY = 0;
+        let axisUsed = 'none';
+        
+        // Method 1: Standard gamepad axes
         if (leftController?.inputSource?.gamepad) {
             const axes = leftController.inputSource.gamepad.axes;
-            debugInfo += `Axes: [${axes.map(a => a?.toFixed(2) || 'N/A').join(', ')}]\n`;
             
-            // Try all possible axis combinations for movement
-            let stickX = 0;
-            let stickY = 0;
-            let axisUsed = 'none';
-            
-            // Check all possible axis combinations
-            // Primary thumbstick (most common)
-            if (Math.abs(axes[0]) > 0.1 || Math.abs(axes[1]) > 0.1) {
-                stickX = axes[0];
-                stickY = axes[1];
-                axisUsed = '0,1';
-            } 
-            // Secondary thumbstick
-            else if (Math.abs(axes[2]) > 0.1 || Math.abs(axes[3]) > 0.1) {
-                stickX = axes[2];
-                stickY = axes[3];
-                axisUsed = '2,3';
-            }
-            // Try other possible combinations
-            else if (axes.length > 4 && (Math.abs(axes[4]) > 0.1 || Math.abs(axes[5]) > 0.1)) {
-                stickX = axes[4];
-                stickY = axes[5];
-                axisUsed = '4,5';
-            }
-            
-            debugInfo += `Using axes: ${axisUsed}\n`;
-            debugInfo += `Movement: X:${stickX.toFixed(2)}, Y:${stickY.toFixed(2)}\n`;
-
-            // Apply movement if stick is being used
-            if (Math.abs(stickX) > 0.1 || Math.abs(stickY) > 0.1) {
-                // Get camera direction for movement relative to where user is looking
-                const quaternion = new THREE.Quaternion();
-                state.camera.getWorldQuaternion(quaternion);
-                const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
-                euler.x = 0; // Remove pitch (up/down)
-                euler.z = 0; // Remove roll
-
-                // Create movement vector and apply camera rotation
-                const moveVector = new THREE.Vector3(stickX, 0, stickY);
-                moveVector.applyEuler(euler).normalize();
-
-                // Apply speed and move player
-                const speed = PLAYER_SPEED * delta * 2.0; // Increased speed for better responsiveness
-                player.position.add(moveVector.multiplyScalar(speed));
+            // Log all available axes for debugging
+            if (axes && axes.length > 0) {
+                debugInfo += `Axes: [${axes.map(a => a?.toFixed(2) || 'N/A').join(', ')}]\n`;
                 
-                debugInfo += `Moving: ${moveVector.x.toFixed(2)}, ${moveVector.z.toFixed(2)}\n`;
-                debugInfo += `Position: ${player.position.x.toFixed(1)}, ${player.position.z.toFixed(1)}\n`;
+                // Try all possible axis combinations for movement
+                // Primary thumbstick (most common)
+                if (Math.abs(axes[0]) > 0.1 || Math.abs(axes[1]) > 0.1) {
+                    stickX = axes[0];
+                    stickY = axes[1];
+                    axisUsed = '0,1';
+                } 
+                // Secondary thumbstick
+                else if (Math.abs(axes[2]) > 0.1 || Math.abs(axes[3]) > 0.1) {
+                    stickX = axes[2];
+                    stickY = axes[3];
+                    axisUsed = '2,3';
+                }
+                // Try other possible combinations
+                else if (axes.length > 4 && (Math.abs(axes[4]) > 0.1 || Math.abs(axes[5]) > 0.1)) {
+                    stickX = axes[4];
+                    stickY = axes[5];
+                    axisUsed = '4,5';
+                }
             }
-            
-            // Update the debug text
-            updateMovementDebugText(debugInfo);
         }
+        
+        // Method 2: Try to get movement from controller position changes
+        if (axisUsed === 'none' && leftController) {
+            // Get controller position and orientation
+            const controllerPos = new THREE.Vector3();
+            leftController.getWorldPosition(controllerPos);
+            
+            // Get controller forward direction
+            const controllerDir = new THREE.Vector3(0, 0, -1);
+            controllerDir.applyQuaternion(leftController.quaternion);
+            controllerDir.y = 0; // Keep movement on horizontal plane
+            controllerDir.normalize();
+            
+            // Use controller tilt for movement direction
+            const tiltThreshold = 0.3;
+            if (Math.abs(controllerDir.z) > tiltThreshold || Math.abs(controllerDir.x) > tiltThreshold) {
+                stickX = -controllerDir.x;
+                stickY = -controllerDir.z;
+                axisUsed = 'controller-tilt';
+            }
+        }
+        
+        // Method 3: Try direct button mapping for movement (fallback)
+        if (axisUsed === 'none' && leftController?.inputSource?.gamepad) {
+            const buttons = leftController.inputSource.gamepad.buttons;
+            const buttonMap = {
+                forward: 4, // Example button index
+                backward: 5,
+                left: 6,
+                right: 7
+            };
+            
+            // Check if any movement buttons are pressed
+            if (buttons.length > Math.max(...Object.values(buttonMap))) {
+                if (buttons[buttonMap.forward]?.pressed) stickY = -1;
+                if (buttons[buttonMap.backward]?.pressed) stickY = 1;
+                if (buttons[buttonMap.left]?.pressed) stickX = -1;
+                if (buttons[buttonMap.right]?.pressed) stickX = 1;
+                
+                if (stickX !== 0 || stickY !== 0) {
+                    axisUsed = 'button-map';
+                }
+            }
+        }
+        
+        debugInfo += `Using method: ${axisUsed}\n`;
+        debugInfo += `Movement: X:${stickX.toFixed(2)}, Y:${stickY.toFixed(2)}\n`;
+
+        // Apply movement if input is detected
+        if (Math.abs(stickX) > 0.1 || Math.abs(stickY) > 0.1) {
+            // Get camera direction for movement relative to where user is looking
+            const quaternion = new THREE.Quaternion();
+            state.camera.getWorldQuaternion(quaternion);
+            const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
+            euler.x = 0; // Remove pitch (up/down)
+            euler.z = 0; // Remove roll
+
+            // Create movement vector and apply camera rotation
+            const moveVector = new THREE.Vector3(stickX, 0, stickY);
+            moveVector.applyEuler(euler).normalize();
+
+            // Apply speed and move player
+            const speed = PLAYER_SPEED * delta * 3.0; // Increased speed for better responsiveness
+            player.position.add(moveVector.multiplyScalar(speed));
+            
+            debugInfo += `Moving: ${moveVector.x.toFixed(2)}, ${moveVector.z.toFixed(2)}\n`;
+            debugInfo += `Position: ${player.position.x.toFixed(1)}, ${player.position.z.toFixed(1)}\n`;
+            
+            // Log movement to VR console when significant movement happens
+            if (moveVector.length() > 0.5) {
+                vrConsole.log(`Moving: ${moveVector.x.toFixed(1)}, ${moveVector.z.toFixed(1)}`);
+            }
+        }
+        
+        // Update the debug text
+        updateMovementDebugText(debugInfo);
         
         // VR Collision detection with room size from constants
         const halfRoomSize = ROOM_SIZE / 2;
@@ -202,11 +262,32 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
         // Add visual indicator at player's feet
         if (!player.children.length) {
           const indicator = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.2, 0.2, 0.05, 16),
-            new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5 })
+            new THREE.CylinderGeometry(0.3, 0.3, 0.05, 16),
+            new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.7 })
           );
           indicator.position.y = -0.8; // Position at feet level
           player.add(indicator);
+          
+          // Add a direction indicator (arrow)
+          const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+          const arrowLength = 0.4;
+          const arrowHead = new THREE.Mesh(
+            new THREE.ConeGeometry(0.08, 0.2, 8),
+            arrowMaterial
+          );
+          arrowHead.position.set(0, -0.8, -arrowLength/2 - 0.1);
+          arrowHead.rotation.x = Math.PI / 2;
+          player.add(arrowHead);
+          
+          const arrowBody = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.02, 0.02, arrowLength, 8),
+            arrowMaterial
+          );
+          arrowBody.position.set(0, -0.8, -arrowLength/4);
+          arrowBody.rotation.x = Math.PI / 2;
+          player.add(arrowBody);
+          
+          vrConsole.log('Player position indicator created');
         }
     } else {
         // Desktop Movement Logic
