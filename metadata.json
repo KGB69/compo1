@@ -1,0 +1,5 @@
+{
+  "name": "Fold VR",
+  "description": "A minimal 3D environment built with React Three Fiber. Explore using WASD keys and interact with an immersive radial menu to view content pages within the 3D world.",
+  "requestFramePermissions": []
+}
