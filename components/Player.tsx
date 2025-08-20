@@ -36,6 +36,7 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
       vrConsole.log('VR Player initialized');
       vrConsole.log(`Room size: ${ROOM_SIZE}x${ROOM_SIZE} meters`);
       vrConsole.log('Move with left thumbstick');
+      vrConsole.log('Fallback controls: Look down to move forward');
       
       // Create movement debug text in VR
       const canvas = document.createElement('canvas');
@@ -48,6 +49,9 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
         context.fillStyle = 'white';
         context.font = '24px Arial';
         context.fillText('Movement Debug: Use left thumbstick', 20, 40);
+        context.fillStyle = '#FFFF00';
+        context.font = '18px Arial';
+        context.fillText('Fallback: Look down to move forward', 20, 70);
       }
       
       const texture = new THREE.CanvasTexture(canvas);
@@ -120,6 +124,14 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
     }
   };
 
+  // Track if controllers are available
+  const [controllersAvailable, setControllersAvailable] = useState<boolean>(false);
+  const lastControllerCheck = useRef<number>(0);
+  
+  // Track head position for fallback controls
+  const lastHeadPosition = useRef<THREE.Vector3>(new THREE.Vector3());
+  const headVelocity = useRef<THREE.Vector3>(new THREE.Vector3());
+  
   useFrame((state, delta) => {
     const canMove = gameState === GameState.EXPLORING || gameState === GameState.MENU;
 
@@ -128,7 +140,43 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
       return;
     }
     
-    if (isPresenting && player && controllers.length > 0) {
+    // Check if controllers are available (not too frequently)
+    if (isPresenting && performance.now() - lastControllerCheck.current > 1000) {
+      const hasControllers = controllers.length > 0 && 
+        (controllers.find(c => c.handedness === 'left') || controllers.find(c => c.handedness === 'right'));
+      
+      setControllersAvailable(hasControllers);
+      lastControllerCheck.current = performance.now();
+      
+      if (!hasControllers) {
+        vrConsole.log('No controllers detected - using fallback controls');
+      }
+    }
+    
+    if (isPresenting && player) {
+      // Calculate head movement for fallback controls
+      if (!controllersAvailable) {
+        // Get current head position
+        const headPosition = new THREE.Vector3();
+        state.camera.getWorldPosition(headPosition);
+        
+        // Calculate head velocity
+        if (lastHeadPosition.current.length() > 0) {
+          headVelocity.current.subVectors(headPosition, lastHeadPosition.current);
+          headVelocity.current.divideScalar(delta);
+          
+          // Log significant head movement
+          if (headVelocity.current.length() > 1.0) {
+            vrConsole.log(`Head velocity: ${headVelocity.current.length().toFixed(2)}`);
+          }
+        }
+        
+        // Store current position for next frame
+        lastHeadPosition.current.copy(headPosition);
+      }
+      
+      // Only try controller-based movement if controllers are available
+      if (controllers.length > 0) {
         // VR Movement Logic with enhanced debugging and controls
         // @ts-ignore - XR controller handedness property
         const leftController = controllers.find(c => c.handedness === 'left');
@@ -289,6 +337,77 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
           
           vrConsole.log('Player position indicator created');
         }
+      } else if (!controllersAvailable) {
+        // FALLBACK CONTROLS: Use head movement as input when controllers aren't available
+        let debugInfo = 'Using fallback head movement controls\n';
+        
+        // Get camera direction
+        const cameraDirection = new THREE.Vector3(0, 0, -1);
+        cameraDirection.applyQuaternion(state.camera.quaternion);
+        cameraDirection.y = 0; // Keep on horizontal plane
+        cameraDirection.normalize();
+        
+        // Get head tilt/movement as input
+        const headTilt = new THREE.Vector3();
+        state.camera.getWorldDirection(headTilt);
+        
+        // Calculate movement based on head tilt and velocity
+        let moveVector = new THREE.Vector3();
+        
+        // Method 1: Forward movement based on significant forward head tilt
+        const forwardTiltThreshold = -0.3; // Looking down threshold
+        if (headTilt.y < forwardTiltThreshold) {
+          // Move forward when looking down
+          const tiltStrength = Math.min(1.0, Math.abs(headTilt.y) * 2);
+          moveVector.add(cameraDirection.clone().multiplyScalar(tiltStrength));
+          debugInfo += `Forward tilt: ${headTilt.y.toFixed(2)}, strength: ${tiltStrength.toFixed(2)}\n`;
+        }
+        
+        // Method 2: Use significant head movement velocity
+        const velocityThreshold = 0.5;
+        if (headVelocity.current.length() > velocityThreshold) {
+          // Project head velocity onto horizontal plane
+          const horizontalVelocity = new THREE.Vector3(
+            headVelocity.current.x,
+            0,
+            headVelocity.current.z
+          );
+          
+          // Only use forward/backward component
+          const forwardComponent = horizontalVelocity.dot(cameraDirection);
+          if (Math.abs(forwardComponent) > velocityThreshold) {
+            const velocityStrength = Math.min(1.0, Math.abs(forwardComponent) * 0.5);
+            moveVector.add(cameraDirection.clone().multiplyScalar(forwardComponent > 0 ? velocityStrength : -velocityStrength));
+            debugInfo += `Head velocity: ${forwardComponent.toFixed(2)}, strength: ${velocityStrength.toFixed(2)}\n`;
+          }
+        }
+        
+        // Apply movement if any
+        if (moveVector.length() > 0.1) {
+          // Normalize and apply speed
+          moveVector.normalize();
+          const speed = PLAYER_SPEED * delta * 2.0;
+          player.position.add(moveVector.multiplyScalar(speed));
+          
+          debugInfo += `Moving: ${moveVector.x.toFixed(2)}, ${moveVector.z.toFixed(2)}\n`;
+          debugInfo += `Position: ${player.position.x.toFixed(1)}, ${player.position.z.toFixed(1)}\n`;
+          
+          // Log significant movement to VR console
+          vrConsole.log(`Fallback movement: ${moveVector.x.toFixed(1)}, ${moveVector.z.toFixed(1)}`);
+        } else {
+          debugInfo += 'No movement detected\n';
+        }
+        
+        // Update debug text
+        updateMovementDebugText(debugInfo);
+        
+        // Apply room boundaries
+        const halfRoomSize = ROOM_SIZE / 2;
+        const playerPadding = 0.5;
+        player.position.x = THREE.MathUtils.clamp(player.position.x, -halfRoomSize + playerPadding, halfRoomSize - playerPadding);
+        player.position.z = THREE.MathUtils.clamp(player.position.z, -halfRoomSize + playerPadding, halfRoomSize - playerPadding);
+        player.position.y = 0; // Keep player on the ground
+      }
     } else {
         // Desktop Movement Logic
         velocity.current.x -= velocity.current.x * 10.0 * delta;
