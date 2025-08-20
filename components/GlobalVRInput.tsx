@@ -17,11 +17,12 @@ declare global {
 
 interface GlobalVRInputProps {
   onMenuToggle: () => void;
-  onBack: () => void;
   onMenuSelect?: () => void;
+  onBack: () => void;
+  onMove?: (x: number, y: number) => void;
 }
 
-export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBack, onMenuSelect }) => {
+export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBack, onMenuSelect, onMove }) => {
   const { controllers, isPresenting, player, session } = useXR();
   const { scene } = useThree();
   const menuButtonPressed = useRef(false);
@@ -339,25 +340,31 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
       return;
     }
     
-    // Process left controller for menu button (typically Y/B button)
+    // Process left controller for menu button and movement
     if (leftGamepad) {
       const buttons = leftGamepad.buttons;
       const axes = leftGamepad.axes;
       
-      // Log axes for movement debugging
+      // Handle movement with left thumbstick
       if (axes && axes.length >= 2) {
-        const x = axes[0]?.toFixed(2) || 'N/A';
-        const y = axes[1]?.toFixed(2) || 'N/A';
+        const x = axes[0] || 0;
+        const y = axes[1] || 0;
         
-        // Only log when there's significant movement
-        if (Math.abs(Number(x)) > 0.1 || Math.abs(Number(y)) > 0.1) {
-          vrConsole.log(`Left stick: X:${x}, Y:${y}`);
+        // Only process when there's significant movement
+        if (Math.abs(x) > 0.1 || Math.abs(y) > 0.1) {
+          // Log movement for debugging
+          vrConsole.log(`Left stick: X:${x.toFixed(2)}, Y:${y.toFixed(2)}`);
+          
+          // Call movement handler if provided
+          if (onMove) {
+            onMove(x, y);
+          }
         }
       }
       
-      // Check for menu button (typically button 3 = Y on Quest)
+      // Check for menu toggle button (typically Y button = index 4 on Quest)
       // Try multiple indices since button mapping can vary by device
-      const menuButtonIndices = [3, 4, 5, 6, 7]; // Extended to try more indices
+      const menuButtonIndices = [4, 3, 5, 6, 7]; // Y button is usually 4 on Quest
       
       for (const index of menuButtonIndices) {
         if (index < buttons.length) {
@@ -368,6 +375,18 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
             onMenuToggle();
             break;
           }
+        }
+      }
+      
+      // Check for VRConsole toggle (X button = index 3 on Quest)
+      if (buttons.length > 3) {
+        const isPressed = buttons[3]?.pressed || false;
+        
+        if (wasButtonJustPressed('left', 3, isPressed)) {
+          vrConsole.log(`X button (3) pressed - toggling VRConsole`);
+          // Simulate V key press to toggle console
+          const event = new KeyboardEvent('keydown', { key: 'v' });
+          window.dispatchEvent(event);
         }
       }
       
@@ -386,23 +405,33 @@ export const GlobalVRInput: React.FC<GlobalVRInputProps> = ({ onMenuToggle, onBa
     if (rightGamepad) {
       const buttons = rightGamepad.buttons;
       
-      // Check for select button (typically trigger = button 0)
+      // Check for select button (trigger = button 0)
       if (buttons && buttons.length > 0) {
         const isSelectPressed = buttons[0]?.pressed || false;
         
         if (wasButtonJustPressed('right', 0, isSelectPressed) && onMenuSelect) {
-          vrConsole.log('Select button pressed - triggering select');
+          vrConsole.log('Trigger pressed - triggering select');
           onMenuSelect();
         }
       }
       
-      // Check for back button (typically grip = button 1)
+      // Check for back button (grip = button 1)
       if (buttons && buttons.length > 1) {
         const isBackPressed = buttons[1]?.pressed || false;
         
         if (wasButtonJustPressed('right', 1, isBackPressed)) {
-          vrConsole.log('Back button pressed - triggering back');
+          vrConsole.log('Grip pressed - triggering back');
           onBack();
+        }
+      }
+      
+      // Check for menu toggle with right controller (B button = index 5 on Quest)
+      if (buttons && buttons.length > 5) {
+        const isPressed = buttons[5]?.pressed || false;
+        
+        if (wasButtonJustPressed('right', 5, isPressed)) {
+          vrConsole.log('B button pressed - toggling menu');
+          onMenuToggle();
         }
       }
       

@@ -135,6 +135,33 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
   // Direct access to WebXR input sources
   const xrInputSources = useRef<any[]>([]);
   
+  // Track controller movement from GlobalVRInput
+  const controllerMovement = useRef<{x: number, y: number}>({x: 0, y: 0});
+  
+  // Listen for VR movement events from GlobalVRInput
+  useEffect(() => {
+    const handleVRMovement = (event: CustomEvent) => {
+      if (event.detail && typeof event.detail.x === 'number' && typeof event.detail.y === 'number') {
+        controllerMovement.current = {
+          x: event.detail.x,
+          y: event.detail.y
+        };
+        
+        // Log significant movement to VR console
+        if (Math.abs(event.detail.x) > 0.5 || Math.abs(event.detail.y) > 0.5) {
+          vrConsole.log(`Controller movement: X:${event.detail.x.toFixed(2)}, Y:${event.detail.y.toFixed(2)}`);
+        }
+      }
+    };
+    
+    // Add event listener for VR movement events
+    window.addEventListener('vr-movement', handleVRMovement as EventListener);
+    
+    return () => {
+      window.removeEventListener('vr-movement', handleVRMovement as EventListener);
+    };
+  }, []);
+  
   useFrame((state, delta) => {
     const canMove = gameState === GameState.EXPLORING || gameState === GameState.MENU;
 
@@ -361,8 +388,15 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
         debugInfo += `Using method: ${axisUsed}\n`;
         debugInfo += `Movement: X:${stickX.toFixed(2)}, Y:${stickY.toFixed(2)}\n`;
 
+        // Check for movement from GlobalVRInput first (preferred method)
+        const hasControllerMovement = Math.abs(controllerMovement.current.x) > 0.1 || Math.abs(controllerMovement.current.y) > 0.1;
+        
+        // Use controller movement from GlobalVRInput if available, otherwise use local detection
+        const finalStickX = hasControllerMovement ? controllerMovement.current.x : stickX;
+        const finalStickY = hasControllerMovement ? controllerMovement.current.y : stickY;
+        
         // Apply movement if input is detected
-        if (Math.abs(stickX) > 0.1 || Math.abs(stickY) > 0.1) {
+        if (Math.abs(finalStickX) > 0.1 || Math.abs(finalStickY) > 0.1) {
             // Get camera direction for movement relative to where user is looking
             const quaternion = new THREE.Quaternion();
             state.camera.getWorldQuaternion(quaternion);
@@ -371,7 +405,7 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
             euler.z = 0; // Remove roll
 
             // Create movement vector and apply camera rotation
-            const moveVector = new THREE.Vector3(stickX, 0, stickY);
+            const moveVector = new THREE.Vector3(finalStickX, 0, finalStickY);
             moveVector.applyEuler(euler).normalize();
 
             // Apply speed and move player
@@ -380,6 +414,7 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
             
             debugInfo += `Moving: ${moveVector.x.toFixed(2)}, ${moveVector.z.toFixed(2)}\n`;
             debugInfo += `Position: ${player.position.x.toFixed(1)}, ${player.position.z.toFixed(1)}\n`;
+            debugInfo += hasControllerMovement ? 'Source: GlobalVRInput\n' : `Source: ${axisUsed}\n`;
             
             // Log movement to VR console when significant movement happens
             if (moveVector.length() > 0.5) {

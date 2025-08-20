@@ -138,7 +138,14 @@ export default function App(): React.ReactNode {
             <GlobalVRInput 
               onMenuToggle={handleOpenMenu} 
               onBack={handleBack} 
-              onMenuSelect={gameState === GameState.MENU ? handleSelectPage.bind(null, PAGES[0]) : undefined} 
+              onMenuSelect={gameState === GameState.MENU ? handleSelectPage.bind(null, PAGES[0]) : undefined}
+              onMove={(x, y) => {
+                // Dispatch movement events to Player component
+                const moveEvent = new CustomEvent('vr-movement', { 
+                  detail: { x, y } 
+                });
+                window.dispatchEvent(moveEvent);
+              }}
             />
             <Scene />
             <Player 

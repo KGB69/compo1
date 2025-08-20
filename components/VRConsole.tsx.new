@@ -124,7 +124,7 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
   const controllerInfoRef = useRef<THREE.Mesh>();
   const [consoleVisible, setConsoleVisible] = useState<boolean>(false);
   
-  // Toggle console visibility with V key
+  // Toggle console visibility with V key or controller button
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'v' || e.key === 'V') {
@@ -168,7 +168,7 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
         scene.remove(mesh);
       };
     }
-  }, [isPresenting, scene]);
+  }, [isPresenting, consoleVisible, scene]);
   
   // Create main console panel
   useEffect(() => {
@@ -214,7 +214,7 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
         scene.remove(mesh);
       };
     }
-  }, [isPresenting, maxLines, scene]);
+  }, [isPresenting, consoleVisible, maxLines, scene]);
   
   // Update the console texture with new logs
   const updateConsoleTexture = (logs: string[]) => {
@@ -406,6 +406,52 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
       texture.needsUpdate = true;
     }
   };
+  
+  // Add a small indicator when console is hidden
+  useEffect(() => {
+    if (isPresenting && !consoleVisible) {
+      // Create a small indicator that console can be toggled
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 64;
+      
+      const context = canvas.getContext('2d');
+      if (context) {
+        // Draw background
+        context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw border
+        context.strokeStyle = '#ffffff';
+        context.lineWidth = 2;
+        context.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+        
+        // Draw text
+        context.fillStyle = '#ffffff';
+        context.font = '16px Arial';
+        context.fillText('Press V to show debug console', 20, 36);
+      }
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.MeshBasicMaterial({ 
+        map: texture, 
+        transparent: true,
+        opacity: 0.8,
+        side: THREE.DoubleSide
+      });
+      
+      const geometry = new THREE.PlaneGeometry(0.5, 0.125);
+      const mesh = new THREE.Mesh(geometry, material);
+      
+      // Position the indicator in a less obtrusive position
+      mesh.position.set(0, 2.2, -1.5);
+      scene.add(mesh);
+      
+      return () => {
+        scene.remove(mesh);
+      };
+    }
+  }, [isPresenting, consoleVisible, scene]);
   
   return null;
 };
