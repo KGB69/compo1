@@ -8,6 +8,7 @@ import { RadialMenu } from './components/RadialMenu';
 import { ImmersivePage } from './components/ImmersivePage';
 import { GlobalVRInput } from './components/GlobalVRInput';
 import { VRConsole, useControllerMonitor, vrConsole } from './components/VRConsole';
+import { VRControllers } from './components/VRControllers';
 import { GameState, PageContent } from './types';
 import { PAGES } from './constants';
 
@@ -132,6 +133,7 @@ export default function App(): React.ReactNode {
             {/* VR Console for debugging in headset */}
             <VRConsole maxLines={15} />
             <ControllerMonitor />
+            <VRControllers />
             
             <GlobalVRInput 
               onMenuToggle={handleOpenMenu} 
