@@ -1,8 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { useThree, useFrame } from '@react-three/fiber';
-import { Html } from '@react-three/drei';
+import { useThree, useFrame, extend } from '@react-three/fiber';
+import { Html, Plane, Box, Sphere } from '@react-three/drei';
 import * as NGL from 'ngl';
+
+// Extend Three.js with R3F components
+extend({
+  Group: THREE.Group,
+  Mesh: THREE.Mesh,
+  PlaneGeometry: THREE.PlaneGeometry,
+  MeshBasicMaterial: THREE.MeshBasicMaterial
+});
 
 // Extract PDB ID from URL
 function extractPdbId(url: string): string | null {
@@ -215,21 +223,11 @@ export const ThreeJSProteinViewer: React.FC<ThreeJSProteinViewerProps> = ({
   });
 
   return (
-    <group position={new THREE.Vector3(...position)} rotation={new THREE.Euler(...rotation)} scale={new THREE.Vector3(...scale)}>
+    <Plane position={[position[0], position[1], position[2]]} rotation={[rotation[0], rotation[1], rotation[2]]} scale={[scale[0], scale[1], scale[2]]}>
       {textureRef.current ? (
-        <mesh ref={meshRef}>
-          <planeGeometry args={[5, 5]} />
-          <meshBasicMaterial 
-            map={textureRef.current} 
-            transparent={true} 
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+        <Plane ref={meshRef} args={[5, 5]} material-map={textureRef.current} material-transparent={true} material-side={THREE.DoubleSide} />
       ) : (
-        <mesh>
-          <planeGeometry args={[5, 5]} />
-          <meshBasicMaterial color="white" transparent={true} opacity={0.5} />
-        </mesh>
+        <Plane args={[5, 5]} material-color="white" material-transparent={true} material-opacity={0.5} />
       )}
       {loading && (
         <Html position={[0, 0, 0.1]}>
@@ -259,6 +257,6 @@ export const ThreeJSProteinViewer: React.FC<ThreeJSProteinViewerProps> = ({
           </div>
         </Html>
       )}
-    </group>
+    </Plane>
   );
 };

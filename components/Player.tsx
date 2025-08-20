@@ -140,27 +140,38 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
   
   // Listen for VR movement events from GlobalVRInput
   useEffect(() => {
-    const handleVRMovement = (event: CustomEvent) => {
-      if (event.detail && typeof event.detail.x === 'number' && typeof event.detail.y === 'number') {
-        controllerMovement.current = {
-          x: event.detail.x,
-          y: event.detail.y
-        };
-        
-        // Log significant movement to VR console
-        if (Math.abs(event.detail.x) > 0.5 || Math.abs(event.detail.y) > 0.5) {
-          vrConsole.log(`Controller movement: X:${event.detail.x.toFixed(2)}, Y:${event.detail.y.toFixed(2)}`);
-        }
+    const handleControllerMovement = (event: any) => {
+      if (event.detail) {
+        controllerMovement.current = { x: event.detail.x, y: event.detail.y };
+        vrConsole.log(`Received movement event: X:${event.detail.x.toFixed(2)}, Y:${event.detail.y.toFixed(2)}`);
       }
     };
     
-    // Add event listener for VR movement events
-    window.addEventListener('vr-movement', handleVRMovement as EventListener);
+    // Add event listener for custom vr-movement events
+    window.addEventListener('vr-movement', handleControllerMovement);
+    
+    // Also check for global vrMovement object (alternative communication method)
+    const checkGlobalMovement = setInterval(() => {
+      if (typeof window !== 'undefined' && window.vrMovement) {
+        controllerMovement.current = { 
+          x: window.vrMovement.x, 
+          y: window.vrMovement.y 
+        };
+      }
+    }, 50); // Check frequently
     
     return () => {
-      window.removeEventListener('vr-movement', handleVRMovement as EventListener);
+      window.removeEventListener('vr-movement', handleControllerMovement);
+      clearInterval(checkGlobalMovement);
     };
   }, []);
+  
+  // Add global type definition for window.vrMovement
+  declare global {
+    interface Window {
+      vrMovement?: { x: number; y: number };
+    }
+  }
   
   useFrame((state, delta) => {
     const canMove = gameState === GameState.EXPLORING || gameState === GameState.MENU;
@@ -172,34 +183,39 @@ export const Player: React.FC<PlayerProps> = ({ gameState, isLocked, onPointerLo
     
     // Check if controllers are available (not too frequently)
     if (isPresenting && performance.now() - lastControllerCheck.current > 1000) {
+      lastControllerCheck.current = performance.now();
+      
       // Update direct WebXR input sources
       if (player?.session) {
         const sources = player.session.inputSources;
         xrInputSources.current = Array.from(sources || []);
-        
-        if (xrInputSources.current.length > 0) {
-          vrConsole.log(`Direct WebXR: Found ${xrInputSources.current.length} input sources`);
+      }
+      
+      // Check for controllers from react-three/xr
+      const hasLeftController = controllers.some(c => c.handedness === 'left');
+      const hasRightController = controllers.some(c => c.handedness === 'right');
+      
+      // Check for controllers from direct WebXR API
+      const hasWebXRLeftController = xrInputSources.current.some(source => source.handedness === 'left');
+      const hasWebXRRightController = xrInputSources.current.some(source => source.handedness === 'right');
+      
+      // Check for global vrMovement as another indicator of controller presence
+      const hasGlobalMovement = typeof window !== 'undefined' && window.vrMovement !== undefined;
+      
+      // Update controller availability - consider any source of controller input
+      const newControllersAvailable = hasLeftController || hasRightController || 
+                                     hasWebXRLeftController || hasWebXRRightController || 
+                                     hasGlobalMovement;
+      
+      // Log controller status changes
+      if (newControllersAvailable !== controllersAvailable) {
+        vrConsole.log(`Controller status changed: ${newControllersAvailable ? 'Available' : 'Not available'}`);
+        if (newControllersAvailable) {
+          vrConsole.log(`Left: ${hasLeftController || hasWebXRLeftController ? 'Yes' : 'No'}, Right: ${hasRightController || hasWebXRRightController ? 'Yes' : 'No'}, GlobalMovement: ${hasGlobalMovement ? 'Yes' : 'No'}`);
         }
       }
       
-      // Check for controllers using both methods
-      const hasControllersFromReactXR = controllers.length > 0 && 
-        (controllers.find(c => c.handedness === 'left') || controllers.find(c => c.handedness === 'right'));
-      
-      const hasControllersFromWebXR = xrInputSources.current.length > 0 &&
-        (xrInputSources.current.find(source => source.handedness === 'left') || 
-         xrInputSources.current.find(source => source.handedness === 'right'));
-      
-      const hasControllers = hasControllersFromReactXR || hasControllersFromWebXR;
-      
-      setControllersAvailable(hasControllers);
-      lastControllerCheck.current = performance.now();
-      
-      if (!hasControllers) {
-        vrConsole.log('No controllers detected - using fallback controls');
-      } else if (hasControllersFromWebXR && !hasControllersFromReactXR) {
-        vrConsole.log('Controllers detected via direct WebXR API but not via react-three/xr');
-      }
+      setControllersAvailable(newControllersAvailable);
     }
     
     if (isPresenting && player) {

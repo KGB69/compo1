@@ -122,7 +122,7 @@ export const VRConsole: React.FC<VRConsoleProps> = ({ maxLines = 20 }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const consoleRef = useRef<THREE.Mesh>();
   const controllerInfoRef = useRef<THREE.Mesh>();
-  const [consoleVisible, setConsoleVisible] = useState<boolean>(false);
+  const [consoleVisible, setConsoleVisible] = useState<boolean>(true);
   
   // Toggle console visibility with V key
   useEffect(() => {
